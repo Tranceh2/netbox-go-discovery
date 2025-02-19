@@ -1,6 +1,6 @@
 module github.com/tranceh2/netbox-go-discovery
 
-go 1.23.6
+go 1.23
 
 require (
 	github.com/Ullaakut/nmap v2.0.2+incompatible
