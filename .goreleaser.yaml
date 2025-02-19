@@ -1,3 +1,4 @@
+version: 2
 project_name: netbox-go-discovery
 
 before:
@@ -5,8 +6,8 @@ before:
     - go mod download
 
 builds:
-  - main: ./cmd/netbox-go-discovery/main.go
-    binary: netbox-go-discovery
+  - binary: netbox-go-discovery
+    main: ./cmd/netbox-go-discovery/main.go
     goos:
       - linux
       - darwin
@@ -17,7 +18,7 @@ builds:
 archives:
   - name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}"
     wrap_in_directory: true
-    format: tar.gz
+    formats: ["tar.gz"]
     files:
       - LICENSE
       - README.md
