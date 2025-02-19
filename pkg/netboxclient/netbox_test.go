@@ -38,7 +38,9 @@ func fakeGetIPResponse(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		panic("failed to encode fakeGetIPResponse: " + err.Error())
+	}
 }
 
 func TestGetNetboxIPs(t *testing.T) {
@@ -75,7 +77,9 @@ func fakeCreateIPResponse(w http.ResponseWriter, r *http.Request) {
 		},
 		"nat_outside": []interface{}{},
 	}
-	json.NewEncoder(w).Encode(response)
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		panic("failed to encode fakeCreateIPResponse: " + err.Error())
+	}
 }
 
 func TestCreateNetboxIP(t *testing.T) {
@@ -110,7 +114,9 @@ func fakeUpdateIPResponse(w http.ResponseWriter, r *http.Request) {
 		},
 		"nat_outside": []interface{}{},
 	}
-	json.NewEncoder(w).Encode(response)
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		panic("failed to encode fakeUpdateIPResponse: " + err.Error())
+	}
 }
 
 func TestUpdateNetboxIP(t *testing.T) {
@@ -145,7 +151,9 @@ func fakeMarkDeprecatedResponse(w http.ResponseWriter, r *http.Request) {
 		},
 		"nat_outside": []interface{}{},
 	}
-	json.NewEncoder(w).Encode(response)
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		panic("failed to encode fakeMarkDeprecatedResponse: " + err.Error())
+	}
 }
 
 func TestMarkNetboxIPDeprecated(t *testing.T) {

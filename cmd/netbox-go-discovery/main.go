@@ -194,7 +194,9 @@ func startHTTPServer(ctx context.Context, port string) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("OK"))
+		if _, err := w.Write([]byte("OK")); err != nil {
+			log.Error().Err(err).Msg("failed to write healthz response")
+		}
 	})
 	mux.Handle("/metrics", promhttp.Handler())
 	srv := &http.Server{
@@ -204,7 +206,9 @@ func startHTTPServer(ctx context.Context, port string) {
 	go func() {
 		<-ctx.Done()
 		log.Info().Msg("Shutting down HTTP server...")
-		srv.Shutdown(context.Background())
+		if err := srv.Shutdown(context.Background()); err != nil {
+			log.Error().Err(err).Msg("failed to shutdown HTTP server")
+		}
 	}()
 	log.Info().Msgf("HTTP server listening on port %s", port)
 	if err := srv.ListenAndServe(); err != http.ErrServerClosed {

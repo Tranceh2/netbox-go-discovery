@@ -9,23 +9,23 @@ import (
 // Config holds the application configuration settings.
 // It centralizes all the configuration parameters needed for the application to run.
 type Config struct {
-	// TargetRange specifies the IP range to scan
+	// TargetRange specifies the IP range to scan.
 	TargetRange string
-	// NetboxHost is the URL of the NetBox instance
+	// NetboxHost is the URL of the NetBox instance.
 	NetboxHost string
-	// NetboxToken is the authentication token for NetBox API
+	// NetboxToken is the authentication token for NetBox API.
 	NetboxToken string
-	// ConcurrencyLimit defines the maximum number of concurrent operations
+	// ConcurrencyLimit defines the maximum number of concurrent operations.
 	ConcurrencyLimit int
-	// Verbose enables detailed logging output
+	// Verbose enables detailed logging output.
 	Verbose bool
-	// DetailedIPLogs enables comprehensive IP scanning logs
+	// DetailedIPLogs enables comprehensive IP scanning logs.
 	DetailedIPLogs bool
-	// LogFormat specifies the format of logs (e.g., "text", "json")
+	// LogFormat specifies the format of logs (e.g., "text", "json").
 	LogFormat string
-	// HealthPort defines the port for health check endpoint
+	// HealthPort defines the port for health check endpoint.
 	HealthPort string
-	// CronSchedule specifies when the scanning job should run
+	// CronSchedule specifies when the scanning job should run.
 	CronSchedule string
 }
 
@@ -35,7 +35,9 @@ type Config struct {
 func LoadConfig() (*Config, error) {
 	concurrency := 50
 	if v := os.Getenv("CONCURRENCY_LIMIT"); v != "" {
-		fmt.Sscanf(v, "%d", &concurrency)
+		if _, err := fmt.Sscanf(v, "%d", &concurrency); err != nil {
+			return nil, fmt.Errorf("failed to parse CONCURRENCY_LIMIT: %w", err)
+		}
 	}
 	healthPort := "8080"
 	if v := os.Getenv("HEALTH_PORT"); v != "" {
