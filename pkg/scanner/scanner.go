@@ -83,12 +83,9 @@ func RunScan(ctx context.Context, targetRange string, concurrencyLimit int, deta
 	return overallResults, subnetSummary, nil
 }
 
-// RunHostDiscovery performs host discovery in two phases: Ping Scan and fallback SYN Scan.
-// It returns a slice of HostResult containing the discovered hosts.
-func RunHostDiscovery(target string, detailedIPLogs bool) []HostResult {
+// runPingScan performs a quick ping scan and returns a map of discovered IPs.
+func runPingScan(target string, detailedIPLogs bool) map[string]nmap.Host {
 	discovered := make(map[string]nmap.Host)
-
-	// Phase 1: Quick Ping Scan
 	log.Info().Msgf("Starting quick ping scan on target: %s", target)
 	pingScanner, err := nmap.NewScanner(
 		nmap.WithTargets(target),
@@ -117,8 +114,11 @@ func RunHostDiscovery(target string, detailedIPLogs bool) []HostResult {
 			}
 		}
 	}
+	return discovered
+}
 
-	// Prepare for Phase 2: Fallback SYN Scan
+// runFallbackSYNScan performs SYN scan on IPs not discovered by ping.
+func runFallbackSYNScan(target string, discovered map[string]nmap.Host, detailedIPLogs bool) {
 	allIPs := GenerateIPs(target)
 	var fallbackIPs []string
 	for _, ip := range allIPs {
@@ -127,7 +127,6 @@ func RunHostDiscovery(target string, detailedIPLogs bool) []HostResult {
 		}
 	}
 
-	// Phase 2: Fallback SYN Scan
 	if len(fallbackIPs) > 0 {
 		log.Info().Msgf("Starting fallback SYN scan on %d IPs that did not respond to ping scan.", len(fallbackIPs))
 		fallbackScanner, err := nmap.NewScanner(
@@ -137,7 +136,7 @@ func RunHostDiscovery(target string, detailedIPLogs bool) []HostResult {
 			nmap.WithCustomArguments(
 				"-T3",
 				"--min-parallelism", "50",
-				"--min-parallelism", "100",
+				"--max-parallelism", "100",
 				"--max-retries", "3",
 				"--host-timeout", "5s",
 				"--randomize-hosts",
@@ -167,8 +166,10 @@ func RunHostDiscovery(target string, detailedIPLogs bool) []HostResult {
 			}
 		}
 	}
+}
 
-	// Convert discovered map to a slice of HostResult...
+// convertDiscoveredToResults transforms the map of discovered hosts into a slice of HostResult.
+func convertDiscoveredToResults(discovered map[string]nmap.Host) []HostResult {
 	var results []HostResult
 	for ip, host := range discovered {
 		dnsName := ""
@@ -190,6 +191,13 @@ func RunHostDiscovery(target string, detailedIPLogs bool) []HostResult {
 		})
 	}
 	return results
+}
+
+// RunHostDiscovery performs host discovery combining both phases.
+func RunHostDiscovery(target string, detailedIPLogs bool) []HostResult {
+	discovered := runPingScan(target, detailedIPLogs)
+	runFallbackSYNScan(target, discovered, detailedIPLogs)
+	return convertDiscoveredToResults(discovered)
 }
 
 // ExtractIP extracts the IPv4 address from a host.
