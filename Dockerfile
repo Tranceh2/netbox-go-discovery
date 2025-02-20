@@ -24,6 +24,6 @@ COPY --from=builder /app/netbox-go-discovery .
 
 EXPOSE 8080
 
-USER ngduser
+USER 1000
 
 CMD ["./netbox-go-discovery"]
