@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"net/http"
 	"os"
 	"os/signal"
@@ -51,7 +52,17 @@ func main() {
 	go startHTTPServer(ctx, cfg.HealthPort)
 
 	// Initialize NetBox client
-	apiClient := netbox.NewAPIClientFor(cfg.NetboxHost, cfg.NetboxToken)
+	netboxcfg := netbox.NewConfiguration()
+	netboxcfg.Servers[0].URL = cfg.NetboxHost
+	netboxcfg.AddDefaultHeader("Authorization", "Token "+cfg.NetboxToken)
+	netboxcfg.HTTPClient = &http.Client{
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{
+				InsecureSkipVerify: cfg.SkipCertVerify,
+			},
+		},
+	}
+	apiClient := netbox.NewAPIClient(netboxcfg)
 
 	// Configure cron for scheduled scans
 	c := cron.New(cron.WithLogger(cron.VerbosePrintfLogger(&logger.ZerologCronLogger{Logger: log.Logger})))

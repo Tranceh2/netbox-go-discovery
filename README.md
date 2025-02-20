@@ -57,6 +57,7 @@ The following variables are **optional**:
 - `HEALTH_PORT`: Port for the health check endpoint (default: `8080`).
 - `CRON_SCHEDULE`: Cron schedule for running scans (default: `0 0 * * *` – daily at midnight).
 - `DEPRECATION_THRESHOLD`: The duration after which an IP is considered deprecated (e.g., `24h`; default is `24h`).
+- `SKIP_CERT_VERIFY`: Skip SSL certificate verification (not recommended for production; default: `false`).
 
 ### Usage
 

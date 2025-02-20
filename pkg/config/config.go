@@ -30,6 +30,8 @@ type Config struct {
 	CronSchedule string
 	// DeprecationThreshold is the duration after which an IP is considered deprecated.
 	DeprecationThreshold time.Duration
+	// SkipCertVerify disables TLS certificate verification for NetBox. Use with caution.
+	SkipCertVerify bool
 }
 
 // LoadConfig reads configuration from environment variables and returns a new Config instance.
@@ -75,6 +77,7 @@ func LoadConfig() (*Config, error) {
 	if err != nil {
 		return nil, fmt.Errorf("invalid DEPRECATION_THRESHOLD: %w", err)
 	}
+	skipCertVerify := strings.ToLower(os.Getenv("SKIP_CERT_VERIFY")) == "true"
 
 	return &Config{
 		TargetRange:          targetRange,
@@ -87,5 +90,6 @@ func LoadConfig() (*Config, error) {
 		HealthPort:           healthPort,
 		CronSchedule:         cronSchedule,
 		DeprecationThreshold: deprecationThreshold,
+		SkipCertVerify:       skipCertVerify,
 	}, nil
 }
