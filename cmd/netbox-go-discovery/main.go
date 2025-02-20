@@ -149,9 +149,9 @@ func processNetBox(apiClient *netbox.APIClient, results []scanner.HostResult, cf
 		if _, exists := scannedMap[ip]; !exists {
 			lastSeen, err := netboxclient.ParseScanTime(nbip)
 			if err != nil {
-				lastSeen = time.Now().Add(-25 * time.Hour)
+				lastSeen = time.Now().Add(-cfg.DeprecationThreshold - time.Hour)
 			}
-			if time.Since(lastSeen) > 24*time.Hour {
+			if time.Since(lastSeen) > cfg.DeprecationThreshold {
 				log.Info().Msgf("Marking IP %s as deprecated.", ip)
 				err := netboxclient.MarkNetboxIPDeprecated(apiClient, nbip.Id)
 				if err != nil {

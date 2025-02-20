@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 )
 
 // Config holds the application configuration settings.
@@ -27,6 +28,8 @@ type Config struct {
 	HealthPort string
 	// CronSchedule specifies when the scanning job should run.
 	CronSchedule string
+	// DeprecationThreshold is the duration after which an IP is considered deprecated.
+	DeprecationThreshold time.Duration
 }
 
 // LoadConfig reads configuration from environment variables and returns a new Config instance.
@@ -64,15 +67,25 @@ func LoadConfig() (*Config, error) {
 		return nil, fmt.Errorf("both NETBOX_HOST and NETBOX_TOKEN environment variables must be defined")
 	}
 
+	deprecationThresholdStr := os.Getenv("DEPRECATION_THRESHOLD")
+	if deprecationThresholdStr == "" {
+		deprecationThresholdStr = "24h"
+	}
+	deprecationThreshold, err := time.ParseDuration(deprecationThresholdStr)
+	if err != nil {
+		return nil, fmt.Errorf("invalid DEPRECATION_THRESHOLD: %w", err)
+	}
+
 	return &Config{
-		TargetRange:      targetRange,
-		NetboxHost:       netboxHost,
-		NetboxToken:      netboxToken,
-		ConcurrencyLimit: concurrency,
-		Verbose:          verbose,
-		DetailedIPLogs:   detailedIPLogs,
-		LogFormat:        logFormat,
-		HealthPort:       healthPort,
-		CronSchedule:     cronSchedule,
+		TargetRange:          targetRange,
+		NetboxHost:           netboxHost,
+		NetboxToken:          netboxToken,
+		ConcurrencyLimit:     concurrency,
+		Verbose:              verbose,
+		DetailedIPLogs:       detailedIPLogs,
+		LogFormat:            logFormat,
+		HealthPort:           healthPort,
+		CronSchedule:         cronSchedule,
+		DeprecationThreshold: deprecationThreshold,
 	}, nil
 }
