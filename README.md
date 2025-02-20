@@ -1,4 +1,3 @@
-````markdown
 # Netbox Go Discovery
 
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
@@ -34,7 +33,6 @@ Netbox Go Discovery is a tool that automatically discovers and manages IP addres
    git clone https://github.com/tranceh2/netbox-go-discovery.git
    cd netbox-go-discovery
    ```
-````
 
 2. Build the application:
 
@@ -212,7 +210,3 @@ Contributions are welcome! Please submit a pull request or open an issue for imp
 ## License
 
 This project is licensed under the MIT License. See the `LICENSE` file for details.
-
-```
-
-```
