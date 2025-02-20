@@ -20,7 +20,7 @@ archives:
     wrap_in_directory: true
     formats: ["tar.gz"]
     files:
-      - LICENSE
+      - LICENSE.md
       - README.md
 
 changelog:
