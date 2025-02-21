@@ -32,6 +32,10 @@ type Config struct {
 	DeprecationThreshold time.Duration
 	// SkipCertVerify disables TLS certificate verification for NetBox. Use with caution.
 	SkipCertVerify bool
+	// DnsServer specifies the DNS server address to use for reverse DNS lookups.
+	DnsServer string
+	// UseSYNScan specifies whether to use SYN scan for IP discovery
+	UseSYNScan bool
 }
 
 // LoadConfig reads configuration from environment variables and returns a new Config instance.
@@ -79,6 +83,10 @@ func LoadConfig() (*Config, error) {
 	}
 	skipCertVerify := strings.ToLower(os.Getenv("SKIP_CERT_VERIFY")) == "true"
 
+	dnsServer := normalizeDNSServer(os.Getenv("DNS_SERVER"))
+
+	useSYNScan := strings.ToLower(os.Getenv("SYN_SCAN")) == "true"
+
 	return &Config{
 		TargetRange:          targetRange,
 		NetboxHost:           netboxHost,
@@ -91,5 +99,18 @@ func LoadConfig() (*Config, error) {
 		CronSchedule:         cronSchedule,
 		DeprecationThreshold: deprecationThreshold,
 		SkipCertVerify:       skipCertVerify,
+		DnsServer:            dnsServer,
+		UseSYNScan:           useSYNScan,
 	}, nil
+}
+
+func normalizeDNSServer(dnsServer string) string {
+	if dnsServer == "" {
+		return ""
+	}
+	if !strings.Contains(dnsServer, ":") {
+		// Append default DNS port
+		dnsServer = dnsServer + ":53"
+	}
+	return dnsServer
 }

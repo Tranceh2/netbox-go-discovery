@@ -70,7 +70,7 @@ func main() {
 		metrics.ScanRuns.Inc()
 		startTime := time.Now()
 		log.Info().Msg("Starting scheduled scan...")
-		results, subnetSummary, err := scanner.RunScan(ctx, cfg.TargetRange, cfg.ConcurrencyLimit, cfg.DetailedIPLogs)
+		results, subnetSummary, err := scanner.RunScan(ctx, cfg.TargetRange, cfg.ConcurrencyLimit, cfg.DetailedIPLogs, cfg.DnsServer, cfg.UseSYNScan)
 		if err != nil {
 			log.Error().Msgf("Error during scan: %v", err)
 		} else {
@@ -90,7 +90,7 @@ func main() {
 		log.Info().Msg("Starting initial scan...")
 		metrics.ScanRuns.Inc()
 		startTime := time.Now()
-		results, subnetSummary, err := scanner.RunScan(ctx, cfg.TargetRange, cfg.ConcurrencyLimit, cfg.DetailedIPLogs)
+		results, subnetSummary, err := scanner.RunScan(ctx, cfg.TargetRange, cfg.ConcurrencyLimit, cfg.DetailedIPLogs, cfg.DnsServer, cfg.UseSYNScan)
 		if err != nil {
 			log.Error().Msgf("Initial scan error: %v", err)
 		} else {

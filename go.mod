@@ -4,6 +4,7 @@ go 1.23
 
 require (
 	github.com/Ullaakut/nmap v2.0.2+incompatible
+	github.com/miekg/dns v1.1.63
 	github.com/netbox-community/go-netbox/v4 v4.2.2-1
 	github.com/prometheus/client_golang v1.20.5
 	github.com/robfig/cron/v3 v3.0.1
@@ -24,7 +25,11 @@ require (
 	github.com/prometheus/client_model v0.6.1 // indirect
 	github.com/prometheus/common v0.55.0 // indirect
 	github.com/prometheus/procfs v0.15.1 // indirect
-	golang.org/x/sys v0.22.0 // indirect
+	golang.org/x/mod v0.18.0 // indirect
+	golang.org/x/net v0.31.0 // indirect
+	golang.org/x/sync v0.7.0 // indirect
+	golang.org/x/sys v0.27.0 // indirect
+	golang.org/x/tools v0.22.0 // indirect
 	google.golang.org/protobuf v1.34.2 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

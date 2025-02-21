@@ -7,7 +7,7 @@ Netbox Go Discovery is a tool that automatically discovers and manages IP addres
 
 ## Features
 
-- **Automated Network Discovery:** Scans the network for active hosts using quick ping and fallback SYN scans.
+- **Automated Network Discovery:** Scans the network for active hosts using quick ping and fallback scans.
 - **Netbox Synchronization:** Automatically creates, updates, and deprecates IP addresses in Netbox based on scan results.
 - **Scheduled Scans:** Supports scheduled scans using cron expressions.
 - **Configurable Deprecation Threshold:** Specify the duration after which an IP is considered deprecated (default: 24h).
@@ -15,6 +15,8 @@ Netbox Go Discovery is a tool that automatically discovers and manages IP addres
 - **Detailed Logging:** Provides detailed logs of the scan process, including discovered hosts and Netbox updates.
 - **Prometheus Metrics:** Exposes Prometheus metrics for monitoring scan performance and Netbox synchronization.
 - **Health Check Endpoint:** Includes a `/healthz` endpoint for monitoring the application's status.
+- **Custom DNS Resolution:** Configure a custom DNS server for reverse DNS lookups by using the `DNS_SERVER` option.
+- **SYN Scan Toggle:** Toggle between SYN scan and TCP connect scan for fallback scanning using the `SYN_SCAN` option, with logging that clearly indicates the type of scan being used.
 
 ## Getting Started
 
@@ -58,6 +60,8 @@ The following variables are **optional**:
 - `CRON_SCHEDULE`: Cron schedule for running scans (default: `0 0 * * *` – daily at midnight).
 - `DEPRECATION_THRESHOLD`: The duration after which an IP is considered deprecated (e.g., `24h`; default is `24h`).
 - `SKIP_CERT_VERIFY`: Skip SSL certificate verification (not recommended for production; default: `false`).
+- **`DNS_SERVER`:** Specify a DNS server for reverse DNS lookups (e.g., `192.168.100.30:53`).
+- **`SYN_SCAN`:** Toggle the fallback scan type. Set to `true` to use SYN scan, or `false` to use TCP connect scan (default: `false`).
 
 ### Usage
 
@@ -68,6 +72,8 @@ The following variables are **optional**:
    export NETBOX_HOST="https://netbox.example.com"
    export NETBOX_TOKEN="your_netbox_token"
    export DEPRECATION_THRESHOLD="24h"
+   export DNS_SERVER="192.168.100.30:53"         # Optional: specify a DNS server for reverse DNS
+   export SYN_SCAN="true"           # Optional: enable SYN scan for fallback scanning
    ```
 
 2. Run the application:
@@ -90,6 +96,8 @@ docker run -d \
   -e NETBOX_HOST="https://netbox.example.com" \
   -e NETBOX_TOKEN="your_netbox_token" \
   -e DEPRECATION_THRESHOLD="24h" \
+  -e DNS_SERVER="192.168.100.30:53" \
+  -e SYN_SCAN="true" \
   tranceh2/netbox-go-discovery
 ```
 
@@ -104,6 +112,8 @@ docker run -d \
   -e NETBOX_HOST="https://netbox.example.com" \
   -e NETBOX_TOKEN="your_netbox_token" \
   -e DEPRECATION_THRESHOLD="24h" \
+  -e DNS_SERVER="192.168.100.30:53" \
+  -e SYN_SCAN="true" \
   tranceh2/netbox-go-discovery
 ```
 
@@ -160,6 +170,10 @@ spec:
               value: "0 0 * * *"
             - name: DEPRECATION_THRESHOLD
               value: "24h"
+            - name: DNS_SERVER
+              value: "192.168.100.30:53"
+            - name: SYN_SCAN
+              value: "true"
           securityContext:
             runAsNonRoot: true
             allowPrivilegeEscalation: false
@@ -199,9 +213,9 @@ spec:
 
 ## Monitoring
 
-- **Prometheus Metrics:**  
+- **Prometheus Metrics:**
   The application exposes Prometheus metrics on the `/metrics` endpoint.
-- **Health Check:**  
+- **Health Check:**
   A health check endpoint is available at `/healthz`.
 
 ## Contributing

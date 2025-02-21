@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/Ullaakut/nmap"
+	"github.com/miekg/dns"
 	"github.com/rs/zerolog/log"
 )
 
@@ -32,7 +33,7 @@ type SubnetScanResult struct {
 // RunScan executes the scan process on the targetRange using concurrency.
 // It divides the target range into smaller subnets (/24) if the range is larger than a /24.
 // It returns a slice of HostResult, a map summarizing the number of hosts per subnet, and an error if any.
-func RunScan(ctx context.Context, targetRange string, concurrencyLimit int, detailedIPLogs bool) ([]HostResult, map[string]int, error) {
+func RunScan(ctx context.Context, targetRange string, concurrencyLimit int, detailedIPLogs bool, dnsServer string, useSYNScan bool) ([]HostResult, map[string]int, error) {
 	_, ipNet, err := net.ParseCIDR(targetRange)
 	if err != nil {
 		return nil, nil, fmt.Errorf("invalid target range: %v", err)
@@ -62,7 +63,7 @@ func RunScan(ctx context.Context, targetRange string, concurrencyLimit int, deta
 			defer wg.Done()
 			semaphore <- struct{}{}
 			log.Info().Msgf("Starting discovery on subnet %s (%d/%d)", target, idx+1, len(targets))
-			results := RunHostDiscovery(target, detailedIPLogs)
+			results := RunHostDiscovery(target, detailedIPLogs, dnsServer, useSYNScan)
 			log.Info().Msgf("Discovery complete on subnet %s: %d hosts detected", target, len(results))
 			resultChan <- SubnetScanResult{Subnet: target, Hosts: results}
 			<-semaphore
@@ -90,7 +91,11 @@ func runPingScan(target string, detailedIPLogs bool) map[string]nmap.Host {
 	pingScanner, err := nmap.NewScanner(
 		nmap.WithTargets(target),
 		nmap.WithPingScan(),
-		nmap.WithHostTimeout(4*time.Second),
+		nmap.WithSYNDiscovery(),
+		nmap.WithACKDiscovery(),
+		nmap.WithICMPEchoDiscovery(),
+		nmap.WithICMPTimestampDiscovery(),
+		nmap.WithHostTimeout(6*time.Second),
 	)
 	if err != nil {
 		log.Fatal().Msgf("Error creating ping scan: %v", err)
@@ -117,8 +122,10 @@ func runPingScan(target string, detailedIPLogs bool) map[string]nmap.Host {
 	return discovered
 }
 
-// runFallbackSYNScan performs SYN scan on IPs not discovered by ping.
-func runFallbackSYNScan(target string, discovered map[string]nmap.Host, detailedIPLogs bool) {
+// runFallbackScan performs a fallback scan on IPs that did not respond to the ping scan.
+// The scan type is determined by the useSYNScan flag: if true, a SYN scan is used; otherwise, a Connect scan is performed.
+// It updates the "discovered" map with any newly discovered hosts.
+func runFallbackScan(target string, discovered map[string]nmap.Host, detailedIPLogs bool, useSYNScan bool) {
 	allIPs := GenerateIPs(target)
 	var fallbackIPs []string
 	for _, ip := range allIPs {
@@ -127,40 +134,60 @@ func runFallbackSYNScan(target string, discovered map[string]nmap.Host, detailed
 		}
 	}
 
-	if len(fallbackIPs) > 0 {
-		log.Info().Msgf("Starting fallback SYN scan on %d IPs that did not respond to ping scan.", len(fallbackIPs))
-		fallbackScanner, err := nmap.NewScanner(
-			nmap.WithTargets(fallbackIPs...),
-			nmap.WithSYNScan(),
-			nmap.WithSkipHostDiscovery(),
-			nmap.WithCustomArguments(
-				"-T3",
-				"--min-parallelism", "50",
-				"--max-parallelism", "100",
-				"--max-retries", "3",
-				"--host-timeout", "5s",
-				"--randomize-hosts",
-			),
-			nmap.WithMostCommonPorts(2000),
-		)
-		if err != nil {
-			log.Fatal().Msgf("Error creating fallback SYN scanner: %v", err)
-		}
-		fallbackResult, fbWarnings, err := fallbackScanner.Run()
-		if fbWarnings != nil {
-			log.Debug().Msgf("Fallback SYN scan warnings: %v", fbWarnings)
-		}
-		if err != nil {
-			log.Error().Msgf("Fallback SYN scan error: %v", err)
-		} else if fallbackResult != nil {
-			for _, host := range fallbackResult.Hosts {
-				if strings.ToLower(host.Status.State) == "up" && HasOpenPorts(host) {
-					ip := ExtractIP(host)
-					if ip != "" {
-						discovered[ip] = host
-						if detailedIPLogs {
-							log.Info().Msgf("Host %s discovered during fallback SYN scan.", ip)
-						}
+	if len(fallbackIPs) == 0 {
+		return
+	}
+
+	var scanType string
+	if useSYNScan {
+		scanType = "SYN scan"
+	} else {
+		scanType = "TCP connect scan"
+	}
+	log.Info().Msgf("Starting fallback %s on %d IPs that did not respond to ping scan.", scanType, len(fallbackIPs))
+
+	// Define common scanner options as a slice of functions.
+	opts := []func(*nmap.Scanner){
+		nmap.WithTargets(fallbackIPs...),
+		nmap.WithSkipHostDiscovery(),
+		nmap.WithDisabledDNSResolution(),
+		nmap.WithCustomArguments(
+			"-T3",
+			"--min-parallelism", "50",
+			"--max-parallelism", "100",
+			"--max-retries", "3",
+			"--host-timeout", "5s",
+			"--randomize-hosts",
+		),
+		nmap.WithMostCommonPorts(1000),
+	}
+
+	// Add scan-type specific options.
+	if useSYNScan {
+		opts = append([]func(*nmap.Scanner){nmap.WithSYNScan()}, opts...)
+	} else {
+		opts = append([]func(*nmap.Scanner){nmap.WithConnectScan()}, opts...)
+	}
+
+	fallbackScanner, err := nmap.NewScanner(opts...)
+	if err != nil {
+		log.Fatal().Msgf("Error creating fallback %s scanner: %v", scanType, err)
+	}
+
+	fallbackResult, fbWarnings, err := fallbackScanner.Run()
+	if fbWarnings != nil {
+		log.Debug().Msgf("Fallback %s warnings: %v", scanType, fbWarnings)
+	}
+	if err != nil {
+		log.Error().Msgf("Fallback %s error: %v", scanType, err)
+	} else if fallbackResult != nil {
+		for _, host := range fallbackResult.Hosts {
+			if strings.ToLower(host.Status.State) == "up" && HasOpenPorts(host) {
+				ip := ExtractIP(host)
+				if ip != "" {
+					discovered[ip] = host
+					if detailedIPLogs {
+						log.Info().Msgf("Host %s discovered during fallback %s.", ip, scanType)
 					}
 				}
 			}
@@ -169,11 +196,16 @@ func runFallbackSYNScan(target string, discovered map[string]nmap.Host, detailed
 }
 
 // convertDiscoveredToResults transforms the map of discovered hosts into a slice of HostResult.
-func convertDiscoveredToResults(discovered map[string]nmap.Host) []HostResult {
+func convertDiscoveredToResults(discovered map[string]nmap.Host, dnsServer string) []HostResult {
 	var results []HostResult
 	for ip, host := range discovered {
 		dnsName := ""
-		if len(host.Hostnames) > 0 && host.Hostnames[0].Name != "" {
+		if dnsServer != "" {
+			names, err := customLookupAddr(ip, dnsServer)
+			if err == nil && len(names) > 0 {
+				dnsName = names[0]
+			}
+		} else if len(host.Hostnames) > 0 && host.Hostnames[0].Name != "" {
 			dnsName = host.Hostnames[0].Name
 		} else {
 			names, err := net.LookupAddr(ip)
@@ -193,11 +225,48 @@ func convertDiscoveredToResults(discovered map[string]nmap.Host) []HostResult {
 	return results
 }
 
+func customLookupAddr(ip, dnsServer string) ([]string, error) {
+	// Convert IP to its reverse lookup format.
+	reverse, err := dns.ReverseAddr(ip)
+	if err != nil {
+		return nil, fmt.Errorf("error generating reverse address for %s: %v", ip, err)
+	}
+
+	// Create a DNS message with a PTR query.
+	m := new(dns.Msg)
+	m.SetQuestion(reverse, dns.TypePTR)
+
+	// Create a DNS client and send the query to the specified DNS server.
+	c := new(dns.Client)
+	// Optionally set a timeout:
+	// c.Timeout = 2 * time.Second
+	resp, _, err := c.Exchange(m, dnsServer)
+	if err != nil {
+		// Return immediately if there's an error.
+		return nil, fmt.Errorf("DNS query error for %s: %v", dnsServer, err)
+	}
+
+	// Check if resp is nil before accessing resp.Answer.
+	if resp == nil {
+		return nil, fmt.Errorf("DNS query returned nil response for %s", dnsServer)
+	}
+
+	// Process the response and extract the names.
+	var names []string
+	for _, answer := range resp.Answer {
+		if ptr, ok := answer.(*dns.PTR); ok {
+			// Remove the trailing dot from the name if present.
+			names = append(names, strings.TrimSuffix(ptr.Ptr, "."))
+		}
+	}
+	return names, nil
+}
+
 // RunHostDiscovery performs host discovery combining both phases.
-func RunHostDiscovery(target string, detailedIPLogs bool) []HostResult {
+func RunHostDiscovery(target string, detailedIPLogs bool, dnsServer string, useSYNScan bool) []HostResult {
 	discovered := runPingScan(target, detailedIPLogs)
-	runFallbackSYNScan(target, discovered, detailedIPLogs)
-	return convertDiscoveredToResults(discovered)
+	runFallbackScan(target, discovered, detailedIPLogs, useSYNScan)
+	return convertDiscoveredToResults(discovered, dnsServer)
 }
 
 // ExtractIP extracts the IPv4 address from a host.
