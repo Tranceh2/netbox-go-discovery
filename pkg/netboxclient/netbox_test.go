@@ -96,7 +96,7 @@ func TestCreateNetboxIP(t *testing.T) {
 
 	err = netboxclient.CreateNetboxIP(apiClient, "192.168.50.2", "testdns", "active", map[string]interface{}{
 		"scantime": time.Now().Format(time.RFC3339),
-	})
+	}, "")
 	assert.NoError(t, err)
 }
 
@@ -133,7 +133,7 @@ func TestUpdateNetboxIP(t *testing.T) {
 
 	err = netboxclient.UpdateNetboxIP(apiClient, "192.168.50.3", "testdns-update", "active", map[string]interface{}{
 		"scantime": time.Now().Format(time.RFC3339),
-	}, 789)
+	}, 789, "", false)
 	assert.NoError(t, err)
 }
 
