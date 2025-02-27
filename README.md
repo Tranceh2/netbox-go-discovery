@@ -62,6 +62,8 @@ The following variables are **optional**:
 - `SKIP_CERT_VERIFY`: Skip SSL certificate verification (not recommended for production; default: `false`).
 - **`DNS_SERVER`:** Specify a DNS server for reverse DNS lookups (e.g., `192.168.100.30:53`).
 - **`SYN_SCAN`:** Toggle the fallback scan type. Set to `true` to use SYN scan, or `false` to use TCP connect scan (default: `false`).
+- **`VRF_NAME`:** Specify a VRF name to associate with discovered IPs (optional, defaults to global VRF).
+- **`PRESERVE_DNS`:** When set to `true`, preserves existing DNS names in NetBox when updating IPs (default: `false`).
 
 ### Usage
 
@@ -74,6 +76,8 @@ The following variables are **optional**:
    export DEPRECATION_THRESHOLD="24h"
    export DNS_SERVER="192.168.100.30:53"         # Optional: specify a DNS server for reverse DNS
    export SYN_SCAN="true"           # Optional: enable SYN scan for fallback scanning
+   export VRF_NAME="my-vrf"         # Optional: associate IPs with a specific VRF
+   export PRESERVE_DNS="true"       # Optional: preserve manually set DNS names in NetBox
    ```
 
 2. Run the application:
@@ -98,6 +102,8 @@ docker run -d \
   -e DEPRECATION_THRESHOLD="24h" \
   -e DNS_SERVER="192.168.100.30:53" \
   -e SYN_SCAN="true" \
+  -e VRF_NAME="my-vrf" \
+  -e PRESERVE_DNS="true" \
   tranceh2/netbox-go-discovery
 ```
 
@@ -114,6 +120,8 @@ docker run -d \
   -e DEPRECATION_THRESHOLD="24h" \
   -e DNS_SERVER="192.168.100.30:53" \
   -e SYN_SCAN="true" \
+  -e VRF_NAME="my-vrf" \
+  -e PRESERVE_DNS="true" \
   tranceh2/netbox-go-discovery
 ```
 
@@ -173,6 +181,10 @@ spec:
             - name: DNS_SERVER
               value: "192.168.100.30:53"
             - name: SYN_SCAN
+              value: "true"
+            - name: VRF_NAME
+              value: "my-vrf"
+            - name: PRESERVE_DNS
               value: "true"
           securityContext:
             runAsNonRoot: true

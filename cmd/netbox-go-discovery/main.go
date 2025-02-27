@@ -133,7 +133,7 @@ func processNetBox(apiClient *netbox.APIClient, results []scanner.HostResult, cf
 	// Process IP addresses: create new ones or update existing ones
 	for ip, host := range scannedMap {
 		if nbip, exists := netboxMap[ip]; exists {
-			err := netboxclient.UpdateNetboxIP(apiClient, host.Address, host.DnsName, host.Status, host.CustomFields, nbip.Id)
+			err := netboxclient.UpdateNetboxIP(apiClient, host.Address, host.DnsName, host.Status, host.CustomFields, nbip.Id, cfg.VRFName, cfg.PreserveDNS)
 			if err != nil {
 				log.Error().Msgf("Error updating IP %s: %v", ip, err)
 			} else {
@@ -143,7 +143,7 @@ func processNetBox(apiClient *netbox.APIClient, results []scanner.HostResult, cf
 				}
 			}
 		} else {
-			err := netboxclient.CreateNetboxIP(apiClient, host.Address, host.DnsName, host.Status, host.CustomFields)
+			err := netboxclient.CreateNetboxIP(apiClient, host.Address, host.DnsName, host.Status, host.CustomFields, cfg.VRFName)
 			if err != nil {
 				log.Error().Msgf("Error creating IP %s: %v", ip, err)
 			} else {

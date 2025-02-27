@@ -36,6 +36,10 @@ type Config struct {
 	DnsServer string
 	// UseSYNScan specifies whether to use SYN scan for IP discovery
 	UseSYNScan bool
+	// VRFName specifies the VRF name to associate with discovered IPs (optional)
+	VRFName string
+	// PreserveDNS determines if existing DNS names should be preserved during updates
+	PreserveDNS bool
 }
 
 // LoadConfig reads configuration from environment variables and returns a new Config instance.
@@ -86,6 +90,10 @@ func LoadConfig() (*Config, error) {
 	dnsServer := normalizeDNSServer(os.Getenv("DNS_SERVER"))
 
 	useSYNScan := strings.ToLower(os.Getenv("SYN_SCAN")) == "true"
+	
+	vrfName := os.Getenv("VRF_NAME")
+	
+	preserveDNS := strings.ToLower(os.Getenv("PRESERVE_DNS")) == "true"
 
 	return &Config{
 		TargetRange:          targetRange,
@@ -101,6 +109,8 @@ func LoadConfig() (*Config, error) {
 		SkipCertVerify:       skipCertVerify,
 		DnsServer:            dnsServer,
 		UseSYNScan:           useSYNScan,
+		VRFName:              vrfName,
+		PreserveDNS:          preserveDNS,
 	}, nil
 }
 
