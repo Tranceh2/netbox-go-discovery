@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"crypto/tls"
+	"fmt"
 	"net/http"
 	"os"
 	"os/signal"
@@ -190,12 +191,6 @@ func processNetBox(apiClient *netbox.APIClient, results []scanner.HostResult, cf
 	// Process IP addresses: create new ones or update existing ones
 	for ip, host := range scannedMap {
 		if nbip, exists := netboxMap[ip]; exists {
-			// Only pass open ports if enabled
-			var openPorts []int
-			if cfg.EnableOpenPorts {
-				openPorts = host.OpenPorts
-			}
-
 			err := netboxclient.UpdateNetboxIP(
 				apiClient,
 				host.Address,
@@ -205,7 +200,7 @@ func processNetBox(apiClient *netbox.APIClient, results []scanner.HostResult, cf
 				nbip.Id,
 				cfg.VRFName,
 				cfg.PreserveDNS,
-				openPorts,
+				host.OpenPorts,
 				cfg.OpenPortsField,
 			)
 			if err != nil {
@@ -224,12 +219,6 @@ func processNetBox(apiClient *netbox.APIClient, results []scanner.HostResult, cf
 				}
 			}
 		} else {
-			// Only pass open ports if enabled
-			var openPorts []int
-			if cfg.EnableOpenPorts {
-				openPorts = host.OpenPorts
-			}
-
 			err := netboxclient.CreateNetboxIP(
 				apiClient,
 				host.Address,
@@ -237,7 +226,7 @@ func processNetBox(apiClient *netbox.APIClient, results []scanner.HostResult, cf
 				host.Status,
 				host.CustomFields,
 				cfg.VRFName,
-				openPorts,
+				host.OpenPorts,
 				cfg.OpenPortsField,
 			)
 			if err != nil {
@@ -288,7 +277,7 @@ func processNetBox(apiClient *netbox.APIClient, results []scanner.HostResult, cf
 }
 
 // printSummary outputs a formatted summary of the scan results,
-// including the number of hosts detected per subnet and total scan duration.
+// showing statistics on subnets, open ports, and manageable hosts.
 func printSummary(subnetSummary map[string]int, results []scanner.HostResult, startTime time.Time, cfg *config.Config) {
 	var sortedSubnets []string
 	for subnet := range subnetSummary {
@@ -303,24 +292,25 @@ func printSummary(subnetSummary map[string]int, results []scanner.HostResult, st
 	// Print statistics for open ports if enabled
 	if cfg.EnableOpenPorts {
 		// Count hosts with specific open ports
-		portCounts := make(map[int]int)
+		portCounts := make(map[string]int) // Using strings with format port/protocol
 		for _, host := range results {
 			for _, port := range host.OpenPorts {
-				portCounts[port]++
+				portKey := fmt.Sprintf("%d/%s", port.Number, port.Protocol)
+				portCounts[portKey]++
 			}
 		}
 
 		// Print port statistics if any ports were found
 		if len(portCounts) > 0 {
 			log.Info().Msg("---------- Port Statistics ----------")
-			var sortedPorts []int
-			for port := range portCounts {
-				sortedPorts = append(sortedPorts, port)
+			var sortedPortKeys []string
+			for portKey := range portCounts {
+				sortedPortKeys = append(sortedPortKeys, portKey)
 			}
-			sort.Ints(sortedPorts)
+			sort.Strings(sortedPortKeys)
 
-			for _, port := range sortedPorts {
-				log.Info().Msgf("Port %d: %d host(s)", port, portCounts[port])
+			for _, portKey := range sortedPortKeys {
+				log.Info().Msgf("Port %s: %d host(s)", portKey, portCounts[portKey])
 			}
 		}
 	}
@@ -376,4 +366,3 @@ func splitIP(address string) string {
 	parts := strings.Split(address, "/")
 	return parts[0]
 }
-

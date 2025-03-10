@@ -16,13 +16,18 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
+type PortInfo struct {
+	Number   int    `json:"number"`   // Numeric port
+	Protocol string `json:"protocol"` // Protocol (tcp, udp, etc.)
+}
+
 // HostResult represents the information of a detected host.
 type HostResult struct {
 	Address      string                 `json:"address"`       // IP address of the host.
 	DnsName      string                 `json:"dns_name"`      // DNS name of the host, if available.
-	Status       string                 `json:"status"`        // Status of the host (e.g., "active").
+	Status       string                 `json:"status"`        // Host status (e.g., "active").
 	CustomFields map[string]interface{} `json:"custom_fields"` // Custom fields associated with the host.
-	OpenPorts    []int                  `json:"open_ports"`    // List of open ports on the host.
+	OpenPorts    []PortInfo             `json:"open_ports"`    // List of open ports with protocol.
 }
 
 // SubnetScanResult stores the result of a scan on a subnet.
@@ -286,10 +291,7 @@ func runPingScanOnIPs(ips []string, detailedIPLogs bool) map[string]nmap.Host {
 	return discovered
 }
 
-// Modificaciones para mejorar los logs de tiempo en el escaneo
-// Estas funciones se agregan al archivo scanner.go
-
-// runPortScan con mejoras de timing logs
+// runPortScan performs a port scan on the specified IPs
 func runPortScan(ips []string, detailedIPLogs bool, useSYNScan bool, portsToScan string) map[string]nmap.Host {
 	discovered := make(map[string]nmap.Host)
 
@@ -297,20 +299,21 @@ func runPortScan(ips []string, detailedIPLogs bool, useSYNScan bool, portsToScan
 		return discovered
 	}
 
-	startTime := time.Now()
 	log.Info().Msgf("Starting port scan on %d IPs", len(ips))
 
 	// Define scanner options
 	opts := []func(*nmap.Scanner){
 		nmap.WithTargets(ips...),
 		// nmap.WithSkipHostDiscovery(),
+		nmap.WithOpenOnly(),
 		nmap.WithDisabledDNSResolution(),
+		nmap.WithUDPScan(),
 		nmap.WithCustomArguments(
-			"-T3",
-			"--min-parallelism", "75",
-			"--max-parallelism", "150",
-			"--max-retries", "2",
-			"--host-timeout", "200s",
+			"-T4",
+			"--min-parallelism", "80",
+			"--max-parallelism", "180",
+			"--max-retries", "1",
+			"--host-timeout", "400s",
 			"--source-port", "53",
 			"--randomize-hosts",
 		),
@@ -323,8 +326,7 @@ func runPortScan(ips []string, detailedIPLogs bool, useSYNScan bool, portsToScan
 		log.Info().Msgf("Using custom ports for scan: %s", portsToScan)
 	} else {
 		// Otherwise use top 500 ports
-		commonPorts := "80,23,443,21,22,25,3389,110,445,139,143,53,135,3306,8080,1723,111,995,993,5900,1025,587,8888,199,1720,465,548,113,81,6001,10000,514,5060,179,1026,2000,8443,8000,32768,554,26,1433,49152,2001,515,8008,49154,1027,5666,646,5000,5631,631,49153,8081,2049,88,79,5800,106,2121,1110,49155,6000,513,990,5357,427,49156,543,544,5101,144,7,389,8009,3128,444,9999,5009,7070,5190,3000,5432,1900,3986,13,1029,9,5051,6646,49157,1028,873,1755,2717,4899,9100,119,37,1000,3001,5001,82,10010,1030,9090,2107,1024,2103,6004,1801,5050,19,8031,1041,255,1049,1048,2967,1053,3703,1056,1065,1064,1054,17,808,3689,1031,1044,1071,5901,100,9102,8010,2869,1039,5120,4001,9000,2105,636,1038,2601,1,7000,1066,1069,625,311,280,254,4000,1993,1761,5003,2002,2005,1998,1032,1050,6112,3690,1521,2161,6002,1080,2401,4045,902,7937,787,1058,2383,32771,1033,1040,1059,50000,5555,10001,1494,593,2301,3,1,3268,7938,1234,1022,1074,8002,1036,1035,9001,1037,464,497,1935,6666,2003,6543,1352,24,3269,1111,407,500,20,2006,3260,15000,1218,1034,4444,264,2004,33,1042,42510,999,3052,1023,1068,222,7100,888,4827,1999,563,1717,2008,992,32770,32772,7001,8082,2007,740,5550,2009,5801,1043,512,2701,7019,50001,1700,4662,2065,2010,42,9535,2602,3333,161,5100,5002,2604,4002,6059,1047,8192,8193,2702,6789,9595,1051,9594,9593,16993,16992,5226,5225,32769,3283,1052,8194,1055,1062,9415,8701,8652,8651,8089,65389,65000,64680,64623,55600,55555,52869,35500,33354,23502,20828,1311,1060,4443,730,731,709,1067,13782,5902,366,9050,1002,85,5500,5431,1864,1863,8085,51103,49999,45100,10243,49,3495,6667,90,475,27000,1503,6881,1500,8021,340,78,5566,8088,2222,9071,8899,6005,9876,1501,5102,32774,32773,9101,5679,163,648,146,1666,901,83,9207,8001,8083,5004,3476,8084,5214,14238,12345,912,30,2605,2030,6,541,8007,3005,4,1248,2500,880,306,4242,1097,9009,2525,1086,1088,8291,52822,6101,900,7200,2809,395,800,32775,12000,1083,211,987,705,20005,711,13783,6969,3071,5269,5222,1085,1046,5987,5989,5988,2190,11967,8600,3766,7627,8087,30000,9010,7741,14000,3367,1099,1098,3031,2718,6580,15002,4129,6901,3827,3580,2144,9900,8181,3801,1718,2811,9080,2135,1045,2399,3017,10002,1148,9002,8873,2875,9011,5718,8086,3998,2607,11110,4126,5911,5910,9618,2381,1096,3300,3351,1073,8333,3784,5633,15660,6123,3211,1078,3659,3551,2260,2160,2100,16001,3325,3323,1104,9968,9503,9502,9485,9290,9220,8994,8649,8222,7911,7625,7106,65129,63331,6156,6129,60020,5962,5961,5960,5959,5925,5877,5825,5810,58080,57294,50800"
-		opts = append(opts, nmap.WithPorts(commonPorts))
+		opts = append(opts, nmap.WithMostCommonPorts(500))
 		log.Info().Msg("Using 500 most common ports for scan")
 	}
 
@@ -337,16 +339,6 @@ func runPortScan(ips []string, detailedIPLogs bool, useSYNScan bool, portsToScan
 		log.Debug().Msg("Using Connect scan")
 	}
 
-	// Calculate estimated scan time
-	numPorts := countPorts(portsToScan)
-	estimatedTimePerIP := estimateScanTime(numPorts)
-	estimatedTotalTime := time.Duration(len(ips)) * estimatedTimePerIP
-
-	if detailedIPLogs {
-		log.Info().Msgf("Estimated scan time: %s for %d IPs (%s per IP)",
-			formatDuration(estimatedTotalTime), len(ips), formatDuration(estimatedTimePerIP))
-	}
-
 	// Run the scan
 	scanner, err := nmap.NewScanner(opts...)
 	if err != nil {
@@ -354,20 +346,7 @@ func runPortScan(ips []string, detailedIPLogs bool, useSYNScan bool, portsToScan
 		return discovered
 	}
 
-	scanStart := time.Now()
 	scanResult, warnings, err := scanner.Run()
-	scanDuration := time.Since(scanStart)
-
-	if detailedIPLogs {
-		if len(ips) > 0 {
-			avgTimePerIP := scanDuration / time.Duration(len(ips))
-			log.Info().Msgf("Port scan took %s total (%s avg per IP)",
-				formatDuration(scanDuration), formatDuration(avgTimePerIP))
-		} else {
-			log.Info().Msgf("Port scan took %s total", formatDuration(scanDuration))
-		}
-	}
-
 	if warnings != nil {
 		log.Debug().Msgf("Port scan warnings: %v", warnings)
 	}
@@ -375,147 +354,57 @@ func runPortScan(ips []string, detailedIPLogs bool, useSYNScan bool, portsToScan
 	if err != nil {
 		log.Error().Msgf("Port scan error: %v", err)
 	} else if scanResult != nil {
-		// Log detailed host information with timing
-		if detailedIPLogs {
-			log.Info().Msgf("Scan completed with %d hosts in results from %d IPs scanned (%d%% success rate)",
-				len(scanResult.Hosts), len(ips), calculateSuccessRate(len(scanResult.Hosts), len(ips)))
-
-			// Log IPs that may have timed out or failed
-			if len(scanResult.Hosts) < len(ips) {
-				foundIPs := make(map[string]bool)
-				for _, host := range scanResult.Hosts {
-					ip := ExtractIP(host)
-					if ip != "" {
-						foundIPs[ip] = true
-					}
-				}
-
-				missingCount := 0
-				for _, ip := range ips {
-					if !foundIPs[ip] {
-						missingCount++
-						if missingCount <= 10 { // Limit the logging to first 10 missing IPs
-							log.Info().Msgf("IP %s was not scanned successfully or timed out", ip)
-						}
-					}
-				}
-
-				if missingCount > 10 {
-					log.Info().Msgf("... and %d more IPs were not scanned successfully", missingCount-10)
-				}
-			}
-		}
-
-		// Show detailed timing per host
-		if detailedIPLogs {
-			log.Info().Msgf("Processing scan results for %d hosts", len(scanResult.Hosts))
-		}
-
-		// Process the scan results
-		hostCount := 0
-		hostsWithPorts := 0
-		totalPortsFound := 0
-
 		for _, host := range scanResult.Hosts {
-			hostCount++
-
 			if strings.ToLower(host.Status.State) == "up" && HasOpenPorts(host) {
 				ip := ExtractIP(host)
 				if ip != "" {
 					discovered[ip] = host
 
-					// Extract and log open ports
-					var openPorts []int
+					// Extract and log open ports with protocol
+					var openPortsInfo []PortInfo
 					for _, port := range host.Ports {
 						if strings.ToLower(port.State.State) == "open" {
-							openPorts = append(openPorts, int(port.ID))
+							protocol := strings.ToLower(port.Protocol)
+							if protocol == "" {
+								protocol = "tcp"
+							}
+
+							openPortsInfo = append(openPortsInfo, PortInfo{
+								Number:   int(port.ID),
+								Protocol: protocol,
+							})
 						}
 					}
 
-					if len(openPorts) > 0 {
-						hostsWithPorts++
-						totalPortsFound += len(openPorts)
+					if len(openPortsInfo) > 0 {
+						// Sort by port number
+						sort.Slice(openPortsInfo, func(i, j int) bool {
+							return openPortsInfo[i].Number < openPortsInfo[j].Number
+						})
 
-						sort.Ints(openPorts)
-						portsStr := FormatOpenPorts(openPorts)
+						// Convert to string with "port/protocol" format
+						portDetailsStr := make([]string, len(openPortsInfo))
+						for i, p := range openPortsInfo {
+							portDetailsStr[i] = fmt.Sprintf("%d/%s", p.Number, p.Protocol)
+						}
+
+						portsStr := strings.Join(portDetailsStr, ",")
 						log.Info().Msgf("Host %s has open ports: %s", ip, portsStr)
 					}
 				}
 			}
 		}
-
-		// Log summary statistics
-		if detailedIPLogs && hostCount > 0 {
-			portsPerHost := float64(totalPortsFound) / float64(hostsWithPorts)
-			successRate := calculateSuccessRate(hostsWithPorts, hostCount)
-
-			log.Info().Msgf("Port scan stats: %d/%d hosts have open ports (%.1f%%), avg %.1f ports per host with ports",
-				hostsWithPorts, hostCount, float64(hostsWithPorts)/float64(hostCount)*100, portsPerHost)
-
-			log.Info().Msgf("Scan success rate: %d%% (%d hosts processed out of %d attempted)",
-				successRate, hostCount, len(ips))
-		}
 	}
 
-	totalDuration := time.Since(startTime)
-	log.Info().Msgf("Port scan complete. Discovered %d hosts with open ports in %s.",
-		len(discovered), formatDuration(totalDuration))
-
+	log.Info().Msgf("Port scan complete. Discovered %d hosts with open ports.", len(discovered))
 	return discovered
 }
 
-// countPorts returns the number of ports in a port specification
-func countPorts(portsSpec string) int {
-	if portsSpec == "" {
-		// Default is 500 ports
-		return 500
-	}
-
-	// Split by commas and count
-	ports := strings.Split(portsSpec, ",")
-	return len(ports)
-}
-
-// estimateScanTime estimates scan time per IP based on number of ports
-func estimateScanTime(numPorts int) time.Duration {
-	// Simple model: base time + per port time
-	baseTime := 5 * time.Second
-	perPortTime := 100 * time.Millisecond
-
-	return baseTime + time.Duration(numPorts)*perPortTime
-}
-
-// formatDuration formats a duration in a human-readable form
-func formatDuration(d time.Duration) string {
-	d = d.Round(time.Second)
-
-	if d < time.Minute {
-		return fmt.Sprintf("%ds", d.Seconds())
-	} else if d < time.Hour {
-		m := d / time.Minute
-		s := (d % time.Minute) / time.Second
-		return fmt.Sprintf("%dm%ds", m, s)
-	} else {
-		h := d / time.Hour
-		m := (d % time.Hour) / time.Minute
-		s := (d % time.Minute) / time.Second
-		return fmt.Sprintf("%dh%dm%ds", h, m, s)
-	}
-}
-
-// calculateSuccessRate calculates success rate as a percentage
-func calculateSuccessRate(processed, attempted int) int {
-	if attempted == 0 {
-		return 0
-	}
-	return int((float64(processed) / float64(attempted)) * 100)
-}
-
 // isHostManageable checks if a host has any management ports open
-func isHostManageable(hostPorts []int, managementPorts []int) bool {
+func isHostManageable(hostPorts []PortInfo, managementPorts []int) bool {
 	for _, port := range hostPorts {
 		for _, mgmtPort := range managementPorts {
-			if port == mgmtPort {
+			if port.Number == mgmtPort {
 				return true
 			}
 		}
@@ -542,14 +431,27 @@ func convertDiscoveredToResults(discovered map[string]nmap.Host, dnsServer strin
 			}
 		}
 
-		// Extract open ports from nmap scan results
-		var openPorts []int
+		// Extract open ports and protocol from nmap results
+		var openPorts []PortInfo
 		for _, port := range host.Ports {
 			if strings.ToLower(port.State.State) == "open" {
-				openPorts = append(openPorts, int(port.ID))
+				// Extract the protocol, defaulting to "tcp" if not specified
+				protocol := strings.ToLower(port.Protocol)
+				if protocol == "" {
+					protocol = "tcp"
+				}
+
+				openPorts = append(openPorts, PortInfo{
+					Number:   int(port.ID),
+					Protocol: protocol,
+				})
 			}
 		}
-		sort.Ints(openPorts)
+
+		// Sort by port number
+		sort.Slice(openPorts, func(i, j int) bool {
+			return openPorts[i].Number < openPorts[j].Number
+		})
 
 		// Create the host result
 		results = append(results, HostResult{
@@ -565,15 +467,15 @@ func convertDiscoveredToResults(discovered map[string]nmap.Host, dnsServer strin
 	return results
 }
 
-// FormatOpenPorts converts a slice of port numbers to a comma-separated string
-func FormatOpenPorts(ports []int) string {
+// FormatOpenPorts converts a slice of PortInfo to a comma-separated string with format "port/protocol"
+func FormatOpenPorts(ports []PortInfo) string {
 	if len(ports) == 0 {
 		return ""
 	}
 
 	portStrings := make([]string, len(ports))
 	for i, port := range ports {
-		portStrings[i] = fmt.Sprintf("%d", port)
+		portStrings[i] = fmt.Sprintf("%d/%s", port.Number, port.Protocol)
 	}
 
 	return strings.Join(portStrings, ",")

@@ -10,6 +10,7 @@ import (
 
 	netbox "github.com/netbox-community/go-netbox/v4"
 	"github.com/rs/zerolog/log"
+	"github.com/tranceh2/netbox-go-discovery/pkg/scanner"
 )
 
 // GetNetboxIPs queries NetBox to retrieve IP addresses within the specified target range.
@@ -49,14 +50,16 @@ func GetNetboxIPs(apiClient *netbox.APIClient, targetRange string) ([]netbox.IPA
 // CreateNetboxIP creates a new IP address entry in NetBox.
 // It takes the host address, DNS name, status, custom fields, and optionally a VRF name as parameters.
 // Returns an error if the creation fails.
-func CreateNetboxIP(apiClient *netbox.APIClient, hostAddress, dnsName, status string, customFields map[string]interface{}, vrfName string, openPorts []int, openPortsField string) error {
+func CreateNetboxIP(apiClient *netbox.APIClient, hostAddress, dnsName, status string,
+	customFields map[string]interface{}, vrfName string,
+	openPorts []scanner.PortInfo, openPortsField string,
+) error {
 	netboxStatus := netbox.PatchedWritableIPAddressRequestStatus(status)
 	description := "Automatically discovered via network scan"
 
-	// Add open ports to custom fields if available
+	// Add open ports to custom fields with protocol information
 	if len(openPorts) > 0 && openPortsField != "" {
-		portsStr := FormatOpenPorts(openPorts)
-		customFields[openPortsField] = portsStr
+		customFields[openPortsField] = FormatOpenPorts(openPorts)
 	}
 
 	ipRequest := netbox.WritableIPAddressRequest{
@@ -103,7 +106,10 @@ func CreateNetboxIP(apiClient *netbox.APIClient, hostAddress, dnsName, status st
 // It takes the host address, DNS name, status, custom fields, the IP's ID, and optionally a VRF name as parameters.
 // If preserveDNS is true, it will not update the DNS name if it already exists in NetBox.
 // Returns an error if the update fails.
-func UpdateNetboxIP(apiClient *netbox.APIClient, hostAddress, dnsName, status string, customFields map[string]interface{}, id int32, vrfName string, preserveDNS bool, openPorts []int, openPortsField string) error {
+func UpdateNetboxIP(apiClient *netbox.APIClient, hostAddress, dnsName, status string,
+	customFields map[string]interface{}, id int32, vrfName string,
+	preserveDNS bool, openPorts []scanner.PortInfo, openPortsField string,
+) error {
 	// First, get the current IP address details to check DNS name
 	currentIP, httpResp, err := apiClient.IpamAPI.IpamIpAddressesRetrieve(context.Background(), id).Execute()
 	if err != nil {
@@ -112,10 +118,9 @@ func UpdateNetboxIP(apiClient *netbox.APIClient, hostAddress, dnsName, status st
 		return err
 	}
 
-	// Add open ports to custom fields if available
+	// Add open ports to custom fields with protocol information
 	if len(openPorts) > 0 && openPortsField != "" {
-		portsStr := FormatOpenPorts(openPorts)
-		customFields[openPortsField] = portsStr
+		customFields[openPortsField] = FormatOpenPorts(openPorts)
 	}
 
 	netboxStatus := netbox.PatchedWritableIPAddressRequestStatus(status)
@@ -133,6 +138,8 @@ func UpdateNetboxIP(apiClient *netbox.APIClient, hostAddress, dnsName, status st
 		log.Debug().Msgf("Preserving existing DNS name for IP %s (current: %s, discovered: %s)",
 			hostAddress, *currentIP.DnsName, dnsName)
 	}
+
+	// Resto de la función igual...
 
 	// If VRF name is provided, get the VRF ID and associate the IP with it
 	if vrfName != "" {
@@ -166,15 +173,16 @@ func UpdateNetboxIP(apiClient *netbox.APIClient, hostAddress, dnsName, status st
 	return nil
 }
 
-// FormatOpenPorts converts a slice of port numbers to a comma-separated string
-func FormatOpenPorts(ports []int) string {
+// FormatOpenPorts converts a slice of PortInfo objects to a comma-separated string
+// with port/protocol format
+func FormatOpenPorts(ports []scanner.PortInfo) string {
 	if len(ports) == 0 {
 		return ""
 	}
 
 	portStrings := make([]string, len(ports))
 	for i, port := range ports {
-		portStrings[i] = fmt.Sprintf("%d", port)
+		portStrings[i] = fmt.Sprintf("%d/%s", port.Number, port.Protocol)
 	}
 
 	return strings.Join(portStrings, ",")
@@ -185,20 +193,20 @@ func EnsureCustomFields(apiClient *netbox.APIClient, scantimeField, openPortsFie
 	log.Info().Msg("Checking/creating required custom fields in NetBox...")
 
 	// Always ensure scantime field exists
-	if err := ensureCustomField(apiClient, scantimeField, "Timestamp of last successful scan", "datetime", false); err != nil {
+	if err := ensureCustomField(apiClient, scantimeField, "Timestamp of last successful scan", "datetime", false, "Scan Time"); err != nil {
 		return err
 	}
 
 	// Create open_ports field if enabled
 	if enableOpenPorts && openPortsField != "" {
-		if err := ensureCustomField(apiClient, openPortsField, "Open ports detected during scan", "longtext", false); err != nil {
+		if err := ensureCustomField(apiClient, openPortsField, "Open ports detected during scan", "longtext", false, "Open Ports"); err != nil {
 			return err
 		}
 	}
 
 	// Create manageable field if enabled
 	if enableManageable && manageableField != "" {
-		if err := ensureCustomField(apiClient, manageableField, "Host has remote management ports open", "boolean", true); err != nil {
+		if err := ensureCustomField(apiClient, manageableField, "Host has remote management ports open", "boolean", true, "Remotely Manageable"); err != nil {
 			return err
 		}
 	}
@@ -208,7 +216,7 @@ func EnsureCustomFields(apiClient *netbox.APIClient, scantimeField, openPortsFie
 }
 
 // ensureCustomField creates a custom field if it doesn't exist
-func ensureCustomField(apiClient *netbox.APIClient, fieldName, description, fieldType string, isBoolean bool) error {
+func ensureCustomField(apiClient *netbox.APIClient, fieldName, description, fieldType string, isBoolean bool, label string) error {
 	// First check if the field already exists
 	customFields, httpResp, err := apiClient.ExtrasAPI.ExtrasCustomFieldsList(context.Background()).
 		Name([]string{fieldName}).
@@ -253,6 +261,7 @@ func ensureCustomField(apiClient *netbox.APIClient, fieldName, description, fiel
 		Required:    &required,
 		Default:     &defaultValue,
 		UiVisible:   &uiVisible,
+		Label:       &label,
 	}
 
 	// Send the request to create the field

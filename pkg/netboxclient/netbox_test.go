@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/tranceh2/netbox-go-discovery/pkg/netboxclient"
+	"github.com/tranceh2/netbox-go-discovery/pkg/scanner"
 )
 
 // fakeGetIPResponse simula la respuesta de NetBox para la consulta de IPs.
@@ -96,7 +97,7 @@ func TestCreateNetboxIP(t *testing.T) {
 
 	err = netboxclient.CreateNetboxIP(apiClient, "192.168.50.2", "testdns", "active", map[string]interface{}{
 		"scantime": time.Now().Format(time.RFC3339),
-	}, "")
+	}, "", []scanner.PortInfo{}, "open_ports")
 	assert.NoError(t, err)
 }
 
@@ -133,7 +134,7 @@ func TestUpdateNetboxIP(t *testing.T) {
 
 	err = netboxclient.UpdateNetboxIP(apiClient, "192.168.50.3", "testdns-update", "active", map[string]interface{}{
 		"scantime": time.Now().Format(time.RFC3339),
-	}, 789, "", false)
+	}, 789, "", false, []scanner.PortInfo{}, "open_ports")
 	assert.NoError(t, err)
 }
 

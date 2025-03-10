@@ -14,18 +14,13 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=$TARGETARCH go build -ldflags="-s -w" -o net
 
 FROM alpine:latest
 
-RUN apk add --no-cache nmap ca-certificates libcap && \
-  update-ca-certificates && \
-  setcap cap_net_raw,cap_net_admin,cap_net_bind_service+eip /usr/bin/nmap && \
-  getcap /usr/bin/nmap && \
-  adduser -D -u 1000 ngduser
+RUN apk add --no-cache nmap ca-certificates && \
+  update-ca-certificates
 
 WORKDIR /app
 
 COPY --from=builder /app/netbox-go-discovery .
 
 EXPOSE 8080
-
-USER 1000
 
 CMD ["./netbox-go-discovery"]
