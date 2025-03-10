@@ -310,7 +310,7 @@ func runPortScan(ips []string, detailedIPLogs bool, useSYNScan bool, portsToScan
 			"--min-parallelism", "75",
 			"--max-parallelism", "150",
 			"--max-retries", "2",
-			"--host-timeout", "120s",
+			"--host-timeout", "200s",
 			"--source-port", "53",
 			"--randomize-hosts",
 		),
