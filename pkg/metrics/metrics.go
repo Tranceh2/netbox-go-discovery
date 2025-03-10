@@ -42,10 +42,52 @@ var (
 		Name: "hosts_detected",
 		Help: "Number of hosts detected in the last network scan.",
 	})
+
+	// SubnetScanDuration measures the scan duration per subnet
+	SubnetScanDuration = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "subnet_scan_duration_seconds",
+			Help:    "Duration of network scans per subnet in seconds.",
+			Buckets: prometheus.DefBuckets,
+		},
+		[]string{"subnet"},
+	)
+
+	// ScanSuccessFailure counts successful and failed scans
+	ScanSuccessFailure = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "scan_results_total",
+			Help: "Total number of network scans by result (success/failure).",
+		},
+		[]string{"result"},
+	)
+
+	// OpenPortsDetected counts the total number of open ports detected
+	OpenPortsDetected = prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "open_ports_detected_total",
+		Help: "Total number of open ports detected across all hosts.",
+	})
+
+	// ManageableDevices shows the number of manageable devices found in the last scan
+	ManageableDevices = prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "manageable_devices",
+		Help: "Number of manageable devices detected in the last network scan.",
+	})
 )
 
 // InitMetrics registers all metrics with Prometheus.
 // This function must be called before using any metrics.
 func InitMetrics() {
-	prometheus.MustRegister(ScanRuns, ScanDuration, IpsCreated, IpsUpdated, IpsDeprecated, HostsDetected)
+	prometheus.MustRegister(
+		ScanRuns, 
+		ScanDuration, 
+		IpsCreated, 
+		IpsUpdated, 
+		IpsDeprecated, 
+		HostsDetected,
+		SubnetScanDuration,
+		ScanSuccessFailure,
+		OpenPortsDetected,
+		ManageableDevices,
+	)
 }

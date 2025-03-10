@@ -14,6 +14,7 @@ import (
 	"github.com/Ullaakut/nmap"
 	"github.com/miekg/dns"
 	"github.com/rs/zerolog/log"
+	"github.com/tranceh2/netbox-go-discovery/pkg/metrics"
 )
 
 type PortInfo struct {
@@ -46,6 +47,7 @@ func RunScan(ctx context.Context, targetRange string, concurrencyLimit int, deta
 ) ([]HostResult, map[string]int, error) {
 	_, ipNet, err := net.ParseCIDR(targetRange)
 	if err != nil {
+		metrics.ScanSuccessFailure.WithLabelValues("failure").Inc()
 		return nil, nil, fmt.Errorf("invalid target range: %v", err)
 	}
 	ones, _ := ipNet.Mask.Size()
@@ -65,6 +67,7 @@ func RunScan(ctx context.Context, targetRange string, concurrencyLimit int, deta
 		select {
 		case <-ctx.Done():
 			log.Warn().Msg("Scan cancelled, aborting subnet discovery")
+			metrics.ScanSuccessFailure.WithLabelValues("failure").Inc()
 			return nil, nil, nil
 		default:
 		}
@@ -73,7 +76,9 @@ func RunScan(ctx context.Context, targetRange string, concurrencyLimit int, deta
 			defer wg.Done()
 			semaphore <- struct{}{}
 			log.Info().Msgf("Starting discovery on subnet %s (%d/%d)", target, idx+1, len(targets))
-
+			
+			startTime := time.Now()
+			
 			// Call the unified discovery function with appropriate parameters
 			results := RunNetworkDiscovery(
 				target,
@@ -86,8 +91,13 @@ func RunScan(ctx context.Context, targetRange string, concurrencyLimit int, deta
 				enableManageable,
 				manageableField,
 			)
+			
+			// Record subnet scan duration
+			duration := time.Since(startTime).Seconds()
+			metrics.SubnetScanDuration.WithLabelValues(target).Observe(duration)
 
-			log.Info().Msgf("Discovery complete on subnet %s: %d hosts detected", target, len(results))
+			log.Info().Msgf("Discovery complete on subnet %s: %d hosts detected in %.2f seconds", 
+				target, len(results), duration)
 			resultChan <- SubnetScanResult{Subnet: target, Hosts: results}
 			<-semaphore
 		}(i, t)
@@ -104,6 +114,10 @@ func RunScan(ctx context.Context, targetRange string, concurrencyLimit int, deta
 		subnetSummary[res.Subnet] = len(res.Hosts)
 		overallResults = append(overallResults, res.Hosts...)
 	}
+	
+	metrics.ScanSuccessFailure.WithLabelValues("success").Inc()
+	metrics.HostsDetected.Set(float64(len(overallResults)))
+	
 	return overallResults, subnetSummary, nil
 }
 
@@ -184,14 +198,21 @@ func RunNetworkDiscovery(target string, detailedIPLogs bool, dnsServer string,
 
 	// Check for manageable hosts if enabled
 	if enableManageable {
+		manageableCount := 0
 		for i := range results {
 			isManageable := isHostManageable(results[i].OpenPorts, managementPorts)
 			results[i].CustomFields[manageableField] = isManageable
 
-			if isManageable && detailedIPLogs {
-				log.Info().Msgf("Host %s is remotely manageable", results[i].Address)
+			if isManageable {
+				manageableCount++
+				if detailedIPLogs {
+					log.Info().Msgf("Host %s is remotely manageable", results[i].Address)
+				}
 			}
 		}
+		
+		// Update the manageable devices metric
+		metrics.ManageableDevices.Set(float64(manageableCount))
 	}
 
 	return results
@@ -415,6 +436,8 @@ func isHostManageable(hostPorts []PortInfo, managementPorts []int) bool {
 // convertDiscoveredToResults transforms the map of discovered hosts into a slice of HostResult.
 func convertDiscoveredToResults(discovered map[string]nmap.Host, dnsServer string) []HostResult {
 	var results []HostResult
+	var totalOpenPorts int
+	
 	for ip, host := range discovered {
 		dnsName := ""
 		if dnsServer != "" {
@@ -445,6 +468,9 @@ func convertDiscoveredToResults(discovered map[string]nmap.Host, dnsServer strin
 					Number:   int(port.ID),
 					Protocol: protocol,
 				})
+				
+				// Count each open port for metrics
+				totalOpenPorts++
 			}
 		}
 
@@ -464,6 +490,10 @@ func convertDiscoveredToResults(discovered map[string]nmap.Host, dnsServer strin
 			OpenPorts: openPorts,
 		})
 	}
+	
+	// Increment the open ports metric
+	metrics.OpenPortsDetected.Add(float64(totalOpenPorts))
+	
 	return results
 }
 
