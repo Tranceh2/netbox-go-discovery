@@ -76,9 +76,9 @@ func RunScan(ctx context.Context, targetRange string, concurrencyLimit int, deta
 			defer wg.Done()
 			semaphore <- struct{}{}
 			log.Info().Msgf("Starting discovery on subnet %s (%d/%d)", target, idx+1, len(targets))
-			
+
 			startTime := time.Now()
-			
+
 			// Call the unified discovery function with appropriate parameters
 			results := RunNetworkDiscovery(
 				target,
@@ -91,12 +91,12 @@ func RunScan(ctx context.Context, targetRange string, concurrencyLimit int, deta
 				enableManageable,
 				manageableField,
 			)
-			
+
 			// Record subnet scan duration
 			duration := time.Since(startTime).Seconds()
 			metrics.SubnetScanDuration.WithLabelValues(target).Observe(duration)
 
-			log.Info().Msgf("Discovery complete on subnet %s: %d hosts detected in %.2f seconds", 
+			log.Info().Msgf("Discovery complete on subnet %s: %d hosts detected in %.2f seconds",
 				target, len(results), duration)
 			resultChan <- SubnetScanResult{Subnet: target, Hosts: results}
 			<-semaphore
@@ -114,10 +114,10 @@ func RunScan(ctx context.Context, targetRange string, concurrencyLimit int, deta
 		subnetSummary[res.Subnet] = len(res.Hosts)
 		overallResults = append(overallResults, res.Hosts...)
 	}
-	
+
 	metrics.ScanSuccessFailure.WithLabelValues("success").Inc()
 	metrics.HostsDetected.Set(float64(len(overallResults)))
-	
+
 	return overallResults, subnetSummary, nil
 }
 
@@ -210,7 +210,7 @@ func RunNetworkDiscovery(target string, detailedIPLogs bool, dnsServer string,
 				}
 			}
 		}
-		
+
 		// Update the manageable devices metric
 		metrics.ManageableDevices.Set(float64(manageableCount))
 	}
@@ -410,7 +410,9 @@ func runPortScan(ips []string, detailedIPLogs bool, useSYNScan bool, portsToScan
 						}
 
 						portsStr := strings.Join(portDetailsStr, ",")
-						log.Info().Msgf("Host %s has open ports: %s", ip, portsStr)
+						if detailedIPLogs {
+							log.Info().Msgf("Host %s has open ports: %s", ip, portsStr)
+						}
 					}
 				}
 			}
@@ -437,7 +439,7 @@ func isHostManageable(hostPorts []PortInfo, managementPorts []int) bool {
 func convertDiscoveredToResults(discovered map[string]nmap.Host, dnsServer string) []HostResult {
 	var results []HostResult
 	var totalOpenPorts int
-	
+
 	for ip, host := range discovered {
 		dnsName := ""
 		if dnsServer != "" {
@@ -468,7 +470,7 @@ func convertDiscoveredToResults(discovered map[string]nmap.Host, dnsServer strin
 					Number:   int(port.ID),
 					Protocol: protocol,
 				})
-				
+
 				// Count each open port for metrics
 				totalOpenPorts++
 			}
@@ -490,10 +492,10 @@ func convertDiscoveredToResults(discovered map[string]nmap.Host, dnsServer strin
 			OpenPorts: openPorts,
 		})
 	}
-	
+
 	// Increment the open ports metric
 	metrics.OpenPortsDetected.Add(float64(totalOpenPorts))
-	
+
 	return results
 }
 
