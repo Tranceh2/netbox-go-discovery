@@ -2,9 +2,9 @@ name: CI Pipeline
 
 on:
   push:
-    branches: ["main", "develop"]
+    branches: ["main", "develop", "feat/**", "feature/**"]
   pull_request:
-    branches: develop
+    branches: ["main", "develop"]
 
 jobs:
   golangci:

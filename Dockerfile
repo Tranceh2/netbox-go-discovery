@@ -14,9 +14,10 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=$TARGETARCH go build -ldflags="-s -w" -o net
 
 FROM alpine:latest
 
-RUN apk add --no-cache nmap ca-certificates && \
+RUN apk add --no-cache nmap ca-certificates libcap && \
   update-ca-certificates && \
-  adduser -D -u 1000 ngduser
+  adduser -D -u 1000 ngduser && \
+  setcap cap_net_raw,cap_net_admin,cap_net_bind_service+eip $(which nmap)
 
 WORKDIR /app
 

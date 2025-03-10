@@ -4,6 +4,9 @@ on:
   push:
     tags:
       - "v*.*.*"
+    branches:
+      - "feat/**"
+      - "feature/**"
 
 jobs:
   dockerhub-publish:
@@ -12,8 +15,24 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Docker meta
-        id: meta
+      - name: Set branch name
+        id: branch_name
+        run: |
+          if [[ $GITHUB_REF == refs/tags/* ]]; then
+            echo "is_tag=true" >> $GITHUB_OUTPUT
+            echo "is_feature=false" >> $GITHUB_OUTPUT
+          elif [[ $GITHUB_REF == refs/heads/feat/* || $GITHUB_REF == refs/heads/feature/* ]]; then
+            echo "is_tag=false" >> $GITHUB_OUTPUT
+            echo "is_feature=true" >> $GITHUB_OUTPUT
+            echo "feature_name=$(echo ${GITHUB_REF#refs/heads/} | sed 's/\//-/g')" >> $GITHUB_OUTPUT
+          else
+            echo "is_tag=false" >> $GITHUB_OUTPUT
+            echo "is_feature=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Docker meta for release tags
+        id: meta_release
+        if: steps.branch_name.outputs.is_tag == 'true'
         uses: docker/metadata-action@v5
         with:
           images: tranceh2/netbox-go-discovery
@@ -21,6 +40,15 @@ jobs:
             type=semver,pattern=v{{major}}
             type=semver,pattern=v{{major}}.{{minor}}
             type=semver,pattern=v{{major}}.{{minor}}.{{patch}}
+            
+      - name: Docker meta for feature branches
+        id: meta_feature
+        if: steps.branch_name.outputs.is_feature == 'true'
+        uses: docker/metadata-action@v5
+        with:
+          images: tranceh2/netbox-go-discovery
+          tags: |
+            type=raw,value=${{ steps.branch_name.outputs.feature_name }}
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -37,7 +65,8 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Build and push
+      - name: Build and push for release tags
+        if: steps.branch_name.outputs.is_tag == 'true'
         uses: docker/build-push-action@v6
         with:
           context: ./
@@ -45,5 +74,17 @@ jobs:
           builder: ${{ steps.buildx.outputs.name }}
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          tags: ${{ steps.meta_release.outputs.tags }}
+          labels: ${{ steps.meta_release.outputs.labels }}
+          
+      - name: Build and push for feature branches
+        if: steps.branch_name.outputs.is_feature == 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: ./
+          file: ./Dockerfile
+          builder: ${{ steps.buildx.outputs.name }}
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.meta_feature.outputs.tags }}
+          labels: ${{ steps.meta_feature.outputs.labels }}

@@ -64,19 +64,61 @@ func main() {
 	}
 	apiClient := netbox.NewAPIClient(netboxcfg)
 
+	// Create custom fields in NetBox if enabled
+	if cfg.CreateCustomFields {
+		// Define required fields based on enabled features
+		scantimeField := "scantime"
+		var openPortsField string
+		if cfg.EnableOpenPorts {
+			openPortsField = cfg.OpenPortsField
+		}
+		var manageableField string
+		if cfg.EnableManageable {
+			manageableField = cfg.ManageableField
+		}
+
+		// Create custom fields
+		if err := netboxclient.EnsureCustomFields(
+			apiClient,
+			scantimeField,
+			openPortsField,
+			cfg.EnableOpenPorts,
+			manageableField,
+			cfg.EnableManageable,
+		); err != nil {
+			log.Error().Msgf("Error creating custom fields: %v", err)
+			log.Warn().Msg("Continuing with scan, but some fields might be missing in NetBox")
+		}
+	}
+
 	// Configure cron for scheduled scans
 	c := cron.New(cron.WithLogger(cron.VerbosePrintfLogger(&logger.ZerologCronLogger{Logger: log.Logger})))
 	_, err = c.AddFunc(cfg.CronSchedule, func() {
 		metrics.ScanRuns.Inc()
 		startTime := time.Now()
 		log.Info().Msg("Starting scheduled scan...")
-		results, subnetSummary, err := scanner.RunScan(ctx, cfg.TargetRange, cfg.ConcurrencyLimit, cfg.DetailedIPLogs, cfg.DnsServer, cfg.UseSYNScan)
+
+		// Run scan with updated parameters
+		results, subnetSummary, err := scanner.RunScan(
+			ctx,
+			cfg.TargetRange,
+			cfg.ConcurrencyLimit,
+			cfg.DetailedIPLogs,
+			cfg.DnsServer,
+			cfg.UseSYNScan,
+			cfg.EnableOpenPorts,
+			cfg.PortsToScan,
+			cfg.ManagementPorts,
+			cfg.EnableManageable,
+			cfg.ManageableField,
+		)
+
 		if err != nil {
 			log.Error().Msgf("Error during scan: %v", err)
 		} else {
 			log.Info().Msgf("Scan complete. Discovered %d hosts.", len(results))
 			processNetBox(apiClient, results, cfg)
-			printSummary(subnetSummary, results, startTime)
+			printSummary(subnetSummary, results, startTime, cfg)
 		}
 		metrics.ScanDuration.Observe(time.Since(startTime).Seconds())
 	})
@@ -90,13 +132,28 @@ func main() {
 		log.Info().Msg("Starting initial scan...")
 		metrics.ScanRuns.Inc()
 		startTime := time.Now()
-		results, subnetSummary, err := scanner.RunScan(ctx, cfg.TargetRange, cfg.ConcurrencyLimit, cfg.DetailedIPLogs, cfg.DnsServer, cfg.UseSYNScan)
+
+		// Run scan with updated parameters
+		results, subnetSummary, err := scanner.RunScan(
+			ctx,
+			cfg.TargetRange,
+			cfg.ConcurrencyLimit,
+			cfg.DetailedIPLogs,
+			cfg.DnsServer,
+			cfg.UseSYNScan,
+			cfg.EnableOpenPorts,
+			cfg.PortsToScan,
+			cfg.ManagementPorts,
+			cfg.EnableManageable,
+			cfg.ManageableField,
+		)
+
 		if err != nil {
 			log.Error().Msgf("Initial scan error: %v", err)
 		} else {
 			log.Info().Msgf("Initial scan complete. Discovered %d hosts.", len(results))
 			processNetBox(apiClient, results, cfg)
-			printSummary(subnetSummary, results, startTime)
+			printSummary(subnetSummary, results, startTime, cfg)
 		}
 		metrics.ScanDuration.Observe(time.Since(startTime).Seconds())
 	}()
@@ -133,7 +190,24 @@ func processNetBox(apiClient *netbox.APIClient, results []scanner.HostResult, cf
 	// Process IP addresses: create new ones or update existing ones
 	for ip, host := range scannedMap {
 		if nbip, exists := netboxMap[ip]; exists {
-			err := netboxclient.UpdateNetboxIP(apiClient, host.Address, host.DnsName, host.Status, host.CustomFields, nbip.Id, cfg.VRFName, cfg.PreserveDNS)
+			// Only pass open ports if enabled
+			var openPorts []int
+			if cfg.EnableOpenPorts {
+				openPorts = host.OpenPorts
+			}
+
+			err := netboxclient.UpdateNetboxIP(
+				apiClient,
+				host.Address,
+				host.DnsName,
+				host.Status,
+				host.CustomFields,
+				nbip.Id,
+				cfg.VRFName,
+				cfg.PreserveDNS,
+				openPorts,
+				cfg.OpenPortsField,
+			)
 			if err != nil {
 				log.Error().Msgf("Error updating IP %s: %v", ip, err)
 			} else {
@@ -141,15 +215,44 @@ func processNetBox(apiClient *netbox.APIClient, results []scanner.HostResult, cf
 				if cfg.DetailedIPLogs {
 					log.Info().Msgf("IP %s updated in NetBox.", ip)
 				}
+
+				// Log if this host is remotely manageable
+				if cfg.EnableManageable {
+					if manageable, ok := host.CustomFields[cfg.ManageableField].(bool); ok && manageable {
+						log.Info().Msgf("IP %s is remotely manageable", ip)
+					}
+				}
 			}
 		} else {
-			err := netboxclient.CreateNetboxIP(apiClient, host.Address, host.DnsName, host.Status, host.CustomFields, cfg.VRFName)
+			// Only pass open ports if enabled
+			var openPorts []int
+			if cfg.EnableOpenPorts {
+				openPorts = host.OpenPorts
+			}
+
+			err := netboxclient.CreateNetboxIP(
+				apiClient,
+				host.Address,
+				host.DnsName,
+				host.Status,
+				host.CustomFields,
+				cfg.VRFName,
+				openPorts,
+				cfg.OpenPortsField,
+			)
 			if err != nil {
 				log.Error().Msgf("Error creating IP %s: %v", ip, err)
 			} else {
 				createdCount++
 				if cfg.DetailedIPLogs {
 					log.Info().Msgf("IP %s created in NetBox.", ip)
+				}
+
+				// Log if this host is remotely manageable
+				if cfg.EnableManageable {
+					if manageable, ok := host.CustomFields[cfg.ManageableField].(bool); ok && manageable {
+						log.Info().Msgf("IP %s is remotely manageable", ip)
+					}
 				}
 			}
 		}
@@ -186,7 +289,7 @@ func processNetBox(apiClient *netbox.APIClient, results []scanner.HostResult, cf
 
 // printSummary outputs a formatted summary of the scan results,
 // including the number of hosts detected per subnet and total scan duration.
-func printSummary(subnetSummary map[string]int, results []scanner.HostResult, startTime time.Time) {
+func printSummary(subnetSummary map[string]int, results []scanner.HostResult, startTime time.Time, cfg *config.Config) {
 	var sortedSubnets []string
 	for subnet := range subnetSummary {
 		sortedSubnets = append(sortedSubnets, subnet)
@@ -196,6 +299,46 @@ func printSummary(subnetSummary map[string]int, results []scanner.HostResult, st
 	for _, subnet := range sortedSubnets {
 		log.Info().Msgf("Subnet %s: %d host(s) detected", subnet, subnetSummary[subnet])
 	}
+
+	// Print statistics for open ports if enabled
+	if cfg.EnableOpenPorts {
+		// Count hosts with specific open ports
+		portCounts := make(map[int]int)
+		for _, host := range results {
+			for _, port := range host.OpenPorts {
+				portCounts[port]++
+			}
+		}
+
+		// Print port statistics if any ports were found
+		if len(portCounts) > 0 {
+			log.Info().Msg("---------- Port Statistics ----------")
+			var sortedPorts []int
+			for port := range portCounts {
+				sortedPorts = append(sortedPorts, port)
+			}
+			sort.Ints(sortedPorts)
+
+			for _, port := range sortedPorts {
+				log.Info().Msgf("Port %d: %d host(s)", port, portCounts[port])
+			}
+		}
+	}
+
+	// Print statistics for manageable hosts if enabled
+	if cfg.EnableManageable {
+		manageableCount := 0
+		for _, host := range results {
+			if manageable, ok := host.CustomFields[cfg.ManageableField].(bool); ok && manageable {
+				manageableCount++
+			}
+		}
+
+		log.Info().Msg("---------- Management Statistics ----------")
+		log.Info().Msgf("Remotely manageable hosts: %d (%.2f%%)",
+			manageableCount, float64(manageableCount)/float64(len(results))*100)
+	}
+
 	log.Info().Msgf("Total scan completed in: %s", time.Since(startTime))
 }
 
@@ -233,3 +376,4 @@ func splitIP(address string) string {
 	parts := strings.Split(address, "/")
 	return parts[0]
 }
+

@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -40,6 +41,23 @@ type Config struct {
 	VRFName string
 	// PreserveDNS determines if existing DNS names should be preserved during updates
 	PreserveDNS bool
+
+	// EnableOpenPorts enables port scanning and saving open ports information
+	EnableOpenPorts bool
+	// OpenPortsField specifies the NetBox custom field name to store open ports information
+	OpenPortsField string
+	// PortsToScan specifies which ports to check (overrides the default 1000 common ports)
+	PortsToScan string
+
+	// EnableManageable enables checking for remote management ports and setting a boolean flag
+	EnableManageable bool
+	// ManageableField specifies the NetBox custom field name for manageable status
+	ManageableField string
+	// ManagementPorts specifies ports to check for remote management capability
+	ManagementPorts []int
+
+	// CreateCustomFields enables automatic creation of required custom fields in NetBox
+	CreateCustomFields bool
 }
 
 // LoadConfig reads configuration from environment variables and returns a new Config instance.
@@ -90,10 +108,46 @@ func LoadConfig() (*Config, error) {
 	dnsServer := normalizeDNSServer(os.Getenv("DNS_SERVER"))
 
 	useSYNScan := strings.ToLower(os.Getenv("SYN_SCAN")) == "true"
-	
+
 	vrfName := os.Getenv("VRF_NAME")
-	
+
 	preserveDNS := strings.ToLower(os.Getenv("PRESERVE_DNS")) == "true"
+
+	// OpenPorts configuration
+	enableOpenPorts := strings.ToLower(os.Getenv("ENABLE_OPEN_PORTS")) == "true"
+	openPortsField := os.Getenv("OPEN_PORTS_FIELD")
+	if openPortsField == "" {
+		openPortsField = "open_ports"
+	}
+
+	// Ports to scan configuration
+	portsToScan := os.Getenv("PORTS_TO_SCAN")
+
+	// Manageable configuration
+	enableManageable := strings.ToLower(os.Getenv("ENABLE_MANAGEABLE")) == "true"
+	manageableField := os.Getenv("MANAGEABLE_FIELD")
+	if manageableField == "" {
+		manageableField = "remotely_manageable"
+	}
+
+	// Management ports configuration
+	var managementPorts []int
+	managementPortsStr := os.Getenv("MANAGEMENT_PORTS")
+	if managementPortsStr != "" {
+		for _, portStr := range strings.Split(managementPortsStr, ",") {
+			port, err := strconv.Atoi(strings.TrimSpace(portStr))
+			if err == nil && port > 0 && port <= 65535 {
+				managementPorts = append(managementPorts, port)
+			}
+		}
+	}
+	// Default management ports if none specified
+	if len(managementPorts) == 0 {
+		managementPorts = []int{22, 5985, 5986}
+	}
+
+	// Create custom fields option
+	createCustomFields := strings.ToLower(os.Getenv("CREATE_CUSTOM_FIELDS")) == "true"
 
 	return &Config{
 		TargetRange:          targetRange,
@@ -111,6 +165,13 @@ func LoadConfig() (*Config, error) {
 		UseSYNScan:           useSYNScan,
 		VRFName:              vrfName,
 		PreserveDNS:          preserveDNS,
+		EnableOpenPorts:      enableOpenPorts,
+		OpenPortsField:       openPortsField,
+		PortsToScan:          portsToScan,
+		EnableManageable:     enableManageable,
+		ManageableField:      manageableField,
+		ManagementPorts:      managementPorts,
+		CreateCustomFields:   createCustomFields,
 	}, nil
 }
 
